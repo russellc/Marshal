@@ -1,0 +1,117 @@
+# Marshal
+
+Library for marshaling C style data structures for use communicating with legacy TCP socket communication protocol applications and file formats (e.g. dbf file) using Clojure data structures maps, vectors, lists, numbers, booleans, and strings using OutputStream and InputStream interfaces. Clojure maps are marshalled in order declared using this library's struct function. Clojure sets are not supported. Marshal can  marshal values using big or little endian. Marshal, unlike Protocol Buffers, doesn't space optimize and doesn't allow optional fields, Marshal's use case is with remote applications written in other languages that use a binary protocol format such as C structs.
+
+Primitive marshalling types:
+ubyte - unsigned byte
+sbyte - signed byte
+ushort - unsigned 2 byte integer
+sshort - signed 2 byte integer
+uint32 - unsigned 4 byte integer
+sint32 - signed 4 byte integer
+uint64 - unsigned 8 byte integer
+sint64 - signed 8 byte integer
+float - 4 byte floating point number
+double - 8 byte floating point number
+bool8 - 1 byte boolean
+bool32 - 4 byte boolean
+Marshalling functions to create composite marshalling types
+array - fixed or variable length of homogenous types (from Clojure vectors or lists)
+struct - ordered keyword/marshalling type pairs from (from Clojure maps)
+ascii-string - fixed of variable length ascii string (from Clojure strings)
+
+## Usage
+
+say we have the following C language struct that isn't using byte alignment padding i.e. occupies 4+10+5*4=34 bytes
+
+struct {
+int type;
+char name[10];
+int data[5];
+};
+
+=> (require '[marshal.core :as m])
+;;declare marshalling type "s" in clojure using the same order and byte size as in the C struct i.e. type -> name -> data
+=> (def s (m/struct :type m/sint32 :name (m/ascii-string 10) :data (m/array m/sint32 5)))
+;;create an output stream (normally a socket or file)
+=> (def os (java.io.ByteArrayOutputStream.))
+;;write the clojure map to the outputstream in the order and size as defined in "s" above
+(m/write os s {:type 1 :name "1234567890" :data [1 2 3 4 5]})
+;;create an input strean (normally a socket or file)
+=> (def is (clojure.java.io/input-stream (.toByteArray os)))
+;;read the clojure map from the input stream
+=> (m/read is s)
+{:data [1 2 3 4 5], :name "1234567890", :type 1}
+
+;;the following is a more involved example that reads a dBase file format such as used to store shapefile format
+(ns read-dbf
+  (:require [marshal.core :as m]
+            [clojure.java.io]))
+;;memory layout of dbf file format header 
+(def dbheaderfield (m/struct :name (m/ascii-string 11) 
+                             :type m/ubyte             
+                             :offset m/uint32
+                             :field-size m/ubyte
+                             :field-dec m/ubyte
+                             :res1 (m/array  m/ubyte 2)
+                             :work_area_id m/ubyte
+                             :res2 (m/array m/ubyte 10)
+                             :prod_index m/ubyte))
+
+(def dbheader (m/struct :type  m/ubyte
+                        :mod-year m/ubyte
+                        :mod-month m/ubyte
+                        :mod-day m/ubyte
+                        :rec-count m/uint32
+                        :header-size m/ushort
+                        :rec-size m/ushort
+                        :res1 (m/array m/ubyte 2)
+                        :incomplete-trans m/ubyte
+                        :encryption m/ubyte
+                        :multi-user (m/array m/ubyte 12)
+                        :prod-index m/ubyte
+                        :lang-id m/ubyte
+                        :res2 (m/array m/ubyte 2)
+                        :fields (m/array dbheaderfield (fn [this] (/ (- (:header-size this) 32 1) (m/sizeof dbheaderfield))))
+                        :terminator m/ubyte))
+
+(defn read-column [s m field]
+  (let [sz (:field_size field)
+        name (keyword (.trim (:name field)))
+        val (.trim (m/read s (m/ascii-string sz)))]
+    (condp = (char (:type field))
+        \N (assoc m name (Integer/parseInt val))
+        \C (assoc m name val))))
+
+(defn read-records [s]
+  (let [header (m/read s dbheader)
+        fields (:fields header)]
+    (for [_ (range (:rec_count header))]
+      (if (= 0x20 (.read s))
+        (reduce #(read-column s %1 %2) {:deleted false} fields)
+        (reduce #(read-column s %1 %2) {:deleted true} fields)))))
+ 
+(defn dbf [filename]
+  (binding [m/*byte-order* java.nio.ByteOrder/LITTLE_ENDIAN]
+    (with-open [s (clojure.java.io/input-stream filename)]
+      (doall (read-records s)))))
+
+## Installation
+
+Github:
+Clojars:
+
+(defproject project-uses-marshal "1.0.0"
+  :dependencies [[marshal "1.0.0"]])
+
+
+## License
+
+Copyright (c) 2011 Russell Christopher All rights reserved. The use and
+distribution terms for this software are covered by the Eclipse Public
+License 1.0 (http://opensource.org/licenses/eclipse-1.0.php) which can be found
+in the file epl-v10.html at the root of this distribution. By using this
+software in any fashion, you are agreeing to be bound by the terms of
+this license. You must not remove this notice, or any other, from this
+ software.
+
