@@ -57,7 +57,7 @@
 (defn- byte-offsets [sz]
   (if (big-endian? *byte-order*) (drop (- 8 sz) byte-offsets-be) (take sz byte-offsets-le)))
 
-(defn to-bytes
+(defn- to-bytes
   ([v sz] (to-bytes v sz (byte-offsets sz)))
   ([v sz offsets] (map #(bit-and 0xFF (bit-shift-right v (int %))) offsets )))
 
@@ -79,7 +79,16 @@
     (let [v (byte-array sz)
           n (.read s v)
           shift (byte-offsets sz)]
-      (reduce bit-or (map #(bit-shift-left %1 %2) v shift))))
+      (if (= sz 1)
+        (first v)
+        (if (big-endian? *byte-order*)
+          (bit-or (bit-shift-left (first v) (first shift))
+                  (reduce bit-or (map #(bit-shift-left (bit-and 0xFF %1) %2) (next v) (next shift))))
+          (bit-or (bit-shift-left (last v) (last shift))
+                  (reduce bit-or (map #(bit-shift-left (bit-and 0xFF %1) %2) (take (dec sz)  v) (take (dec sz)  shift))))))))
+
+        
+      ;;(reduce bit-or (map #(bit-shift-left %1 %2) v shift))))
 
   (m-float [s _]
     (let [v (byte-array 4)
@@ -100,7 +109,7 @@
     (reduce (fn [this [k o]] (assoc this k ((m-read o) s this))) {} struct-descr))
 
   (m-ascii-string [s sz]
-    (apply str (m-array s [(fn [s] (char (.read s))) sz])))
+    (.trim (apply str (m-array s [(fn [s] (char (.read s))) sz]))))
 
   OutputStream
   (m-uval [s [v sz]]
@@ -123,10 +132,8 @@
       (reduce + (map #((if (fn? o) o (m-write o)) s %) v)))
   
   (m-struct [s [v d]]
-      (reduce + (map (fn [[n f]]
-                       (if-let [v' (v n)]
-                         ((m-write f) s v')
-                         0)) d)))
+    (reduce + (map (fn [[n f]] ((m-write f) s (v n))) d)))
+
   (m-ascii-string [s v]
     (count (for [x v] (.write s (bit-and 0xFF (int x)))))))
 
@@ -188,7 +195,7 @@
 (primitive-bool bool32 m-uval 4)
 
 (defn array 
-  "marshals homogeneous fixed or variable length array; VLA embed in structs, sz is either a function or keyword returning the size of the array from map member(s)"
+  "marshals homogeneous fixed or variable length array; VLA embed in structs in which case sz is either fixed or function or keyword returning the size of the array from map member(s)"
   [o sz]
   (if (or (keyword? sz) (fn? sz))
      (let [obj (reify
@@ -201,7 +208,10 @@
 			      (if-let [m (first args)]
 		 		(* (sz m) (sizeof o))
 				(sizeof o))))
-		(m-read [_] (fn [s m] (m-array s [o (sz m)])))
+		(m-read [_] (fn [s m] (let [n (sz m)]
+                                       (if (> n 0 )
+                                         (m-array s [o (sz m)])
+                                         0))))
 		(m-write [_] (fn [s v] (m-array s [v o]))))]
        (add-print-method (class obj))
        obj)
@@ -228,7 +238,7 @@
          :else (.substring val 0 sz))))
 
 (defn ascii-string [sz & pad]
-  "marshals a padded fixed width or variable length ASCII string; the default pad char is (char 0); variable length embed in structs, sz is either a function or keyword returning the size of the string from map member(s)"
+  "marshals a padded fixed width or variable length ASCII string; the default pad char is (char 0); variable length embed in structs in which case sz is either fixed or function or keyword returning the size of the string from map member(s)"
   (if (or (keyword? sz) (fn? sz))
     (let [obj (reify
 		Object
@@ -265,7 +275,7 @@
            m (partition 2 arr)
            obj (reify
                  Object
-                 (toString [_] (str "{" (let [s (print-str arr)
+                 (toString [_] (str "struct {" (let [s (print-str arr)
                                               l (- (count s) 1)]
                                           (subs s 1 l))
                                     "}"))

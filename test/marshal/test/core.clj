@@ -34,6 +34,25 @@
     (is (= 65535 (read (input-stream (byte-array 2 (map byte [-1 -1]))) ushort)))
     (is (= -1 (read (input-stream (byte-array 2 (map byte [-1 -1]))) sshort)))))
 
+(deftest signed
+  (binding [*byte-order* ByteOrder/BIG_ENDIAN]
+    (let [os (ByteArrayOutputStream.)
+          _ (write os sbyte 127)
+          _ (write os sbyte -128)
+          _ (write os sshort 32767)
+          _ (write os sshort  -32768)
+          _ (write os uint32 2147483648)
+          _ (write os sint32 -2147483648)
+          _ (write os sint32 2147483647)
+          in (input-stream (.toByteArray os))]
+      (is (= 127 (read in sbyte)))
+      (is (= -128 (read in sbyte)))
+      (is (= 32767 (read in sshort)))
+      (is (= -32768 (read in sshort)))
+      (is (= 2147483648 (read in uint32)))
+      (is (= -2147483648 (read in sint32)))
+      (is (= 2147483647 (read in sint32))))))
+          
 (deftest littleend
   (binding [*byte-order* ByteOrder/LITTLE_ENDIAN]
     (is (= 1  (read (input-stream (byte-array 4 (map byte [1 0 0 0]))) uint32)))
@@ -56,16 +75,20 @@
 (deftest bigend-bool
   (binding [*byte-order* ByteOrder/BIG_ENDIAN]
     (let [os (ByteArrayOutputStream.)
+          _ (write os bool8 false)
           _ (write os bool8 true)
           _ (write os bool8 nil)
 	  _ (write os bool8 1)
+          _ (write os bool32 false)
           _ (write os bool32 true)
           _ (write os bool32 nil)
 	  _ (write os bool32 1)
           in (input-stream (.toByteArray os))]
+      (is (= false (read in bool8)))
       (is (= true (read in bool8)))
       (is (= false (read in bool8)))
       (is (= true (read in bool8)))
+      (is (= false (read in bool32)))
       (is (= true (read in bool32)))
       (is (= false (read in bool32)))
       (is (= true (read in bool32))))))
@@ -166,6 +189,16 @@
       (is (= 3 x2))
       (is (= 4 y2)))))
 
+(deftest test-zero-length-array-in-struct
+  (binding [*byte-order* ByteOrder/BIG_ENDIAN]
+    (let [os (ByteArrayOutputStream.)
+          vla-in []
+	  bytes (write os variable-length-array-in-struct {:size (count vla-in) :vla vla-in})
+          in (input-stream (.toByteArray os))
+	  {size :size vla :vla} (read in variable-length-array-in-struct)]
+      (is (= bytes (sizeof uint32)))
+      (is (= 0 size)))))
+
 (def variable-length-array-in-struct2 (struct
                                        :start uint32
                                        :stop uint32
@@ -198,7 +231,8 @@
 	  bytes (write os as "1234567")
 	  in (input-stream (.toByteArray os))
 	  str (read in as)]
-      (is (= (.trim str) "1234567"))))
+      (is (= bytes 10)
+          (= str "1234567"))))
 
 (deftest test-ascii-string-truncated
     (let [os (ByteArrayOutputStream. (sizeof as))
@@ -225,8 +259,8 @@
 	bytes [(write os struct-with-strings v)]
 	  in (input-stream (.toByteArray os))
 	  res (read in struct-with-strings)]
-    (is (= (:s1 res) (apply str (apply conj (vec (:s1 v)) (repeat 7 (char 0)))))
-	(= (:s2 res) (apply str (apply conj (vec (:s2 v)) (repeat 17 (char 0))))))))
+    (is (= (:s1 res) "abc")
+	(= (:s2 res) "def"))))
 
 (def ascii-in-struct (struct
                       :size uint32
