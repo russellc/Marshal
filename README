@@ -86,7 +86,7 @@ int data[5];
 (defn read-records [s]
   (let [header (m/read s dbheader)
         fields (:fields header)]
-    (for [_ (range (:rec_count header))]
+    (dotimes [_ (range (:rec-count header))]
       (if (= 0x20 (.read s))
         (reduce #(read-column s %1 %2) {:deleted false} fields)
         (reduce #(read-column s %1 %2) {:deleted true} fields)))))
