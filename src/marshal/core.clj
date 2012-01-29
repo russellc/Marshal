@@ -103,10 +103,17 @@
       (Double/longBitsToDouble (reduce + (map #(bit-shift-left (bit-and 0xFF %1) %2) v shift)))))
 
   (m-array [s [o sz]]
-      (vec (for [_ (range sz)] ((if (fn? o) o (m-read o)) s))))
+    (loop [i 0 res (transient [])]
+      (if (< i sz)
+        (recur (inc i) (conj! res ((if (fn? o) o (m-read o)) s)))
+        (persistent! res))))
 
   (m-struct [s struct-descr]
-    (reduce (fn [this [k o]] (assoc this k ((m-read o) s this))) {} struct-descr))
+    (loop [coll (seq struct-descr) res (transient {})]
+      (if coll
+        (let [[[k o] & xs] coll]
+          (recur xs (assoc! res k ((m-read o) s res))))
+        (persistent! res))))
 
   (m-ascii-string [s sz]
     (.trim (apply str (m-array s [(fn [s] (char (.read s))) sz]))))
@@ -200,7 +207,7 @@
   (if (or (keyword? sz) (fn? sz))
      (let [obj (reify
 		Object
-		(toString [_] (format "[%s * ?]" o))
+		(toString [_] (format "array [%s * ?]" o))
 		clojure.lang.Seqable
 		(seq [_] nil)
 		Marshal
@@ -218,7 +225,7 @@
     (let [size (* (sizeof o) sz)
 	  obj (reify
 	       Object
-	       (toString [this] (str (format "[%s * %d]" o sz)))
+	       (toString [this] (str (format "array [%s * %d]" o sz)))
 	       clojure.lang.Seqable
 	       (seq [_] nil)
 	       Marshal
@@ -268,26 +275,30 @@
 
 (defn struct
   "marshals ordered (marshaling order) key/value pairs"
-  ([& arr]
-     (if (odd? (count arr)) (throw (IllegalArgumentException. "struct requires an even number of argumenta")))
-     (let [fields (take-nth 2 arr)
-           types (take-nth 2 (rest arr))
-           m (partition 2 arr)
-           obj (reify
-                 Object
-                 (toString [_] (str "struct {" (let [s (print-str arr)
-                                              l (- (count s) 1)]
-                                          (subs s 1 l))
-                                    "}"))
-                 clojure.lang.Seqable
-                 (seq [_] (seq types))
-                 Marshal
-                 (m-size [_] (fn [& args]
-                               (reduce + (map #(apply (m-size %) args) types)))) 
-                 (m-read [_] (read-f m-struct m))
-                 (m-write [_] (write-f m-struct m)))]
-       (add-print-method (class obj))
-       obj)))
+  ([& args]
+     (let [first (first args)
+           arr (if (or (vector? first) (list? first))
+                 first
+                 args)]
+      (if (odd? (count arr)) (throw (IllegalArgumentException. "struct requires an even number of argumenta")))
+      (let [fields (take-nth 2 arr)
+            types (take-nth 2 (rest arr))
+            m (partition 2 arr)
+            obj (reify
+                  Object
+                  (toString [_] (str "struct {" (let [s (print-str arr)
+                                                      l (- (count s) 1)]
+                                                  (subs s 1 l))
+                                     "}"))
+                  clojure.lang.Seqable
+                  (seq [_] (seq types))
+                  Marshal
+                  (m-size [_] (fn [& args]
+                                (reduce + (map #(apply (m-size %) args) types)))) 
+                  (m-read [_] (read-f m-struct m))
+                  (m-write [_] (write-f m-struct m)))]
+        (add-print-method (class obj))
+        obj))))
 
 (defn read [^InputStream s o]
   "marshal value of type o from inputstream s"
