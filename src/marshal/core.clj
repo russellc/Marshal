@@ -116,7 +116,10 @@
         (persistent! res))))
 
   (m-ascii-string [s sz]
-    (.trim (apply str (m-array s [(fn [s] (char (.read s))) sz]))))
+    (let [^StringBuffer sb (StringBuffer.)]
+      (dotimes [_ sz]
+        (.append sb (char (.read s))))
+      (.trim (str sb))))
 
   OutputStream
   (m-uval [s [v sz]]
