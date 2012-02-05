@@ -1,8 +1,8 @@
 # Marshal
 
-Library for marshaling C style data structures for use communicating with legacy TCP socket communication protocol applications and file formats (e.g. dbf file) using Clojure data structures maps, vectors, lists, numbers, booleans, and strings using OutputStream and InputStream interfaces. Clojure maps are marshalled in order declared using this library's struct function. Clojure sets are not supported. Marshal can  marshal values using big or little endian. Marshal, unlike Protocol Buffers, doesn't space optimize and doesn't allow optional fields, Marshal's use case is with remote applications written in other languages that use a binary protocol format such as C structs.
+Library to marshal C style data structures. For use with legacy TCP socket communication protocols and file formats (e.g. dbf file) . Marshaling to/from clojure data structures: maps, vectors, lists, numbers, booleans, and strings using OutputStream and InputStream interfaces. Marshal big or little endian (default is little endian). 
 
-Primitive marshalling types:
+Primitive marshaling types:
 ubyte - unsigned byte
 sbyte - signed byte
 ushort - unsigned 2 byte integer
@@ -15,15 +15,21 @@ float - 4 byte floating point number
 double - 8 byte floating point number
 bool8 - 1 byte boolean
 bool32 - 4 byte boolean
-Marshalling functions to create composite marshalling types
-array - fixed or variable length of homogenous types (from Clojure vectors or lists)
-struct - ordered keyword/marshalling type pairs from (from Clojure maps)
-ascii-string - fixed of variable length ascii string (from Clojure strings)
+
+Functions to create composite marshalling types:
+array - fixed or variable length of homogenous marshaling types - marshal to/from Clojure vectors (or lists)
+struct - ordered keyword/marshal type pairs - marshal to/from Clojure maps
+ascii-string - fixed of variable length ascii string - marshal to/from Clojure strings ()
+
+Marshaling functions (API):
+read - marshals a value from an InputStream 
+write - marshals a value to an OutputStram
 
 ## Usage
 
-say we have the following C language struct that isn't using byte alignment padding i.e. occupies 4+10+5*4=34 bytes
+say we have a C language struct (no byte alignment padding) that has size 34 bytes (4+10+5*4) that we wish to marshal
 
+//C or C++ header file declaration
 struct {
 int type;
 char name[10];
@@ -31,21 +37,24 @@ int data[5];
 };
 
 => (require '[marshal.core :as m])
-;;declare marshalling type "s" in clojure using the same order and byte size as in the C struct i.e. type -> name -> data
+nil
+;;declare a marshaling struct in the same order and using the same types as the C struct
 => (def s (m/struct :type m/sint32 :name (m/ascii-string 10) :data (m/array m/sint32 5)))
-;;create an output stream (normally a socket or file)
+#'user/s
+;;create an output stream (in lieu of an outputstream from a socket)
 => (def os (java.io.ByteArrayOutputStream.))
-;;write the clojure map to the outputstream in the order and size as defined in "s" above
-(m/write os s {:type 1 :name "1234567890" :data [1 2 3 4 5]})
-;;create an input strean (normally a socket or file)
+#'user/os
+;;marshal a clojure map to the outputstream 
+=> (m/write os s {:type 1 :name "1234567890" :data [1 2 3 4 5]})
+34
+;;create an input stream (in lieu of an inputstream from a socket)
 => (def is (clojure.java.io/input-stream (.toByteArray os)))
-;;read the clojure map from the input stream
+#'user/is
+;;marshal the clojure map from the input stream 
 => (m/read is s)
-{:data [1 2 3 4 5], :name "1234567890", :type 1}
+{:type 1, :name "1234567890", :data [1 2 3 4 5]}
 
-;;the following is a more real world example that reads a dBase file format such as used to store shapefile format
-;;it's just an example i.e. not a full blown dbf engine and only numeric and strings are supported
-;;memory layout of dbf file format header 
+the following, perhaps more realistic looking example, reads a dBase file format e.g. ESRI shapefile attribute format. NOTE: it's just an example i.e. only numeric and strings are supported 
 
 (ns marshal.examples.dbf
   (:require [marshal.core :as m]
@@ -113,8 +122,8 @@ int data[5];
 
 ## Installation
 
-Github:
-Clojars:
+Github: http://github.com/russellc/Marshal
+Clojars: https://clojars.org/marshal
 
 (defproject project-uses-marshal "1.0.0"
   :dependencies [[marshal "1.0.0"]])

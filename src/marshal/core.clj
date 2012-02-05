@@ -205,7 +205,7 @@
 (primitive-bool bool32 m-uval 4)
 
 (defn array 
-  "marshals homogeneous fixed or variable length array; VLA embed in structs in which case sz is either fixed or function or keyword returning the size of the array from map member(s)"
+  "marshals fixed size or variable length arrays of homogeneous type; variable length arrays must be members of structs in which case sz is either a function or a keyword returning the size of the array from map member(s); marshals to/from clojure vectors"
   [o sz]
   (if (or (keyword? sz) (fn? sz))
      (let [obj (reify
@@ -247,8 +247,9 @@
          (< l sz) (concat  val (take (- sz l) (repeat pad)))
          :else (.substring val 0 sz))))
 
-(defn ascii-string [sz & pad]
-  "marshals a padded fixed width or variable length ASCII string; the default pad char is (char 0); variable length embed in structs in which case sz is either fixed or function or keyword returning the size of the string from map member(s)"
+(defn ascii-string 
+  "marshals a padded fixed width or variable length ASCII string; the default pad char is (char 0); variable length must be members of structs in which case sz is either a function or keyword returning the size of the string from map member(s)"
+  [sz & pad]
   (if (or (keyword? sz) (fn? sz))
     (let [obj (reify
 		Object
@@ -277,7 +278,7 @@
       obj)))
 
 (defn struct
-  "marshals ordered (marshaling order) key/value pairs"
+  "marshals an ordered list of keyword-marshal pairs; marshals to/from clojure maps"
   ([& args]
      (let [first (first args)
            arr (if (or (vector? first) (list? first))
@@ -303,10 +304,12 @@
         (add-print-method (class obj))
         obj))))
 
-(defn read [^InputStream s o]
-  "marshal value of type o from inputstream s"
+(defn read
+  "marshals value of type o from inputstream s"
+  [^InputStream s o]
   ((m-read o) s))
 
-(defn write [^OutputStream s o v]
-  "marshal value v of type o to output stream s"
+(defn write
+  "marshals value v of type o to output stream s"
+  [^OutputStream s o v]
   ((m-write o) s v))

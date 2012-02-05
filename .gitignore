@@ -1,9 +1,0 @@
-pom.xml
-.lein-failures
-*.clj#
-*.clj~
-*.dbf
-*jar
-lib
-classes
-resources
