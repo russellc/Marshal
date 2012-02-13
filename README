@@ -20,6 +20,7 @@ Functions to create composite marshalling types:
 array - fixed or variable length of homogenous marshaling types - marshal to/from Clojure vectors (or lists)
 struct - ordered keyword/marshal type pairs - marshal to/from Clojure maps
 ascii-string - fixed of variable length ascii string - marshal to/from Clojure strings ()
+vector - unamed ordered list of marshal types 
 
 Marshaling functions (API):
 read - marshals a value from an InputStream 

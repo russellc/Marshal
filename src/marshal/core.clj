@@ -9,7 +9,7 @@
 ;;(set! *warn-on-reflection* true)
 
 (ns marshal.core
-  (:refer-clojure :exclude [read struct float double])
+  (:refer-clojure :exclude [read struct vector float double])
   (:import [java.nio ByteOrder]
            [java.io InputStream OutputStream]))
 
@@ -35,6 +35,7 @@
   (m-float [s arg])
   (m-double [s arg])
   (m-array [s arg])
+  (m-vector [s arg])
   (m-ascii-string [s arg])
   (m-struct [s arg]))
 
@@ -108,6 +109,9 @@
         (recur (inc i) (conj! res ((if (fn? o) o (m-read o)) s)))
         (persistent! res))))
 
+  (m-vector [s t]
+    (vec (map #((m-read %) s) t)))
+
   (m-struct [s struct-descr]
     (loop [coll (seq struct-descr) res (transient {})]
       (if coll
@@ -140,6 +144,9 @@
   
   (m-array [s [v o]]
       (reduce + (map #((if (fn? o) o (m-write o)) s %) v)))
+  
+  (m-vector [s [v t]]
+      (reduce + (map #((m-write %2) s %1) v t)))
   
   (m-struct [s [v d]]
     (reduce + (map (fn [[n f]] ((m-write f) s (v n))) d)))
@@ -281,7 +288,7 @@
   "marshals an ordered list of keyword-marshal pairs; marshals to/from clojure maps"
   ([& args]
      (let [first (first args)
-           arr (if (or (vector? first) (list? first))
+           arr (if (or (vector? first) (list? first) (seq? first))
                  first
                  args)]
       (if (odd? (count arr)) (throw (IllegalArgumentException. "struct requires an even number of argumenta")))
@@ -303,6 +310,26 @@
                   (m-write [_] (write-f m-struct m)))]
         (add-print-method (class obj))
         obj))))
+
+(defn vector
+  "marshals a vector of marshal types; marshals to/from clojure vectors"
+  ([& args]
+     (let [first (first args)
+           types (if (or (vector? first) (list? first) (seq? first))
+                 first
+                 args)
+            obj (reify
+                  Object
+                  (toString [_] (str "vector " (print-str types)))
+                  clojure.lang.Seqable
+                  (seq [_] (seq types))
+                  Marshal
+                  (m-size [_] (fn [& _]
+                                (sizeof types))) 
+                  (m-read [_] (read-f m-vector types))
+                  (m-write [_] (write-f m-vector types)))]
+        (add-print-method (class obj))
+        obj)))
 
 (defn read
   "marshals value of type o from inputstream s"

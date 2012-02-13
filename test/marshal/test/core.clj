@@ -7,6 +7,7 @@
 ;; software.
 
 (ns marshal.test.core
+  (:refer-clojure :exclude [read struct vector float double])
   (:use [marshal.core] :reload-all)
   (:use [clojure.java.io])
   (:use [clojure.test])
@@ -132,12 +133,11 @@
       (is (= Math/PI (read in double)))
       (is (= 2.0 (read in float))))))
 
-(def arr "marshal 2 element array of uint32"
-  (array uint32 2))
+(def arr "marshal 2 element array of uint32" (array uint32 2))
 
 (deftest test-arr
   (binding [*byte-order* ByteOrder/BIG_ENDIAN]
-    (let [os (ByteArrayOutputStream. (sizeof arr))
+    (let [os (ByteArrayOutputStream.)
 	  bytes (write os arr [1 2])
           in (input-stream (.toByteArray os))
 	  [x y] (read in arr)]
@@ -273,3 +273,17 @@
         in (input-stream (.toByteArray os))
         res (read in ascii-in-struct)]
     (is (= (:ascii res) (:ascii v)))))
+
+(def vec "marshal heterogeneous 4 element vec of uint32" (vector uint32 arr s as))
+
+(deftest test-vector
+  (let [os (ByteArrayOutputStream.)
+        v [1 [2 3] {:x 4 :y 5} "1234567890"]
+        bytes (write os vec v)
+        in (input-stream (.toByteArray os))
+        [a b c d] (read in vec)]
+    (is (= a 1))
+    (is (= b [2 3]))
+    (is (= c {:x 4 :y 5}))
+    (is (= d "1234567890"))
+    (is (= bytes (sizeof vec)))))
