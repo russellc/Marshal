@@ -228,7 +228,7 @@
 		(m-read [_] (fn [s m] (let [n (sz m)]
                                        (if (> n 0 )
                                          (m-array s [o (sz m)])
-                                         0))))
+                                         []))))
 		(m-write [_] (fn [s v] (m-array s [v o]))))]
        (add-print-method (class obj))
        obj)

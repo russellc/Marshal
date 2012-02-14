@@ -197,7 +197,8 @@
           in (input-stream (.toByteArray os))
 	  {size :size vla :vla} (read in variable-length-array-in-struct)]
       (is (= bytes (sizeof uint32)))
-      (is (= 0 size)))))
+      (is (= 0 size))
+      (is (= [] vla)))))
 
 (def variable-length-array-in-struct2 (struct
                                        :start uint32
@@ -274,16 +275,23 @@
         res (read in ascii-in-struct)]
     (is (= (:ascii res) (:ascii v)))))
 
-(def vec "marshal heterogeneous 4 element vec of uint32" (vector uint32 arr s as))
+(def vect "marshal heterogeneous 4 element vec of uint32" (vector uint32 arr s as))
 
 (deftest test-vector
   (let [os (ByteArrayOutputStream.)
         v [1 [2 3] {:x 4 :y 5} "1234567890"]
-        bytes (write os vec v)
+        bytes (write os vect v)
         in (input-stream (.toByteArray os))
-        [a b c d] (read in vec)]
+        [a b c d] (read in vect)]
     (is (= a 1))
     (is (= b [2 3]))
     (is (= c {:x 4 :y 5}))
     (is (= d "1234567890"))
-    (is (= bytes (sizeof vec)))))
+    (is (= bytes (sizeof vect)))))
+
+(deftest test-zero-length-vector
+  (let [os (ByteArrayOutputStream.)
+        bytes (write os (vector) [])
+        in (input-stream (.toByteArray os))]
+    (is (= [] (read in (vector))))))
+        
