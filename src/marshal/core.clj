@@ -28,6 +28,15 @@
   "change root *byte-order* to big endian"
   (alter-var-root #'*byte-order* (constantly ByteOrder/BIG_ENDIAN)))
 
+(defn- read-bytes
+  "read bytes into byte array, looping if necessary"
+  [s bs]
+  (loop [pos 0]
+    (when (< pos (alength bs))
+      (let [toread (- (alength bs) pos)
+            n (.read s bs pos toread)]
+        (recur (+ pos n))))))
+
 (defprotocol MarshalBytes
   "marshal bytes from InputStream and to OutputStream"
   (m-uval [s arg])
@@ -70,7 +79,7 @@
   InputStream
   (m-uval [s sz]
     (let [v (byte-array sz)
-          n (.read s v)
+          n (read-bytes s v)
           shift (byte-offsets sz)]
       (if (<= sz 4)
         (reduce bit-or (map #(bit-shift-left (bit-and 0xFF %1) %2) v shift))
@@ -78,7 +87,7 @@
       
   (m-sval [s sz]
     (let [v (byte-array sz)
-          n (.read s v)
+          n (read-bytes s v)
           shift (byte-offsets sz)]
       (if (= sz 1)
         (first v)
@@ -93,13 +102,13 @@
 
   (m-float [s _]
     (let [v (byte-array 4)
-          n (.read s v)
+          n (read-bytes s v)
           shift (byte-offsets 4)]
       (Float/intBitsToFloat (reduce + (map #(bit-shift-left (bit-and 0xFF %1) %2) v shift)))))
 
   (m-double [s _]
     (let [v (byte-array 8)
-          n (.read s v)
+          n (read-bytes s v)
           shift (byte-offsets 8)]
       (Double/longBitsToDouble (reduce + (map #(bit-shift-left (bit-and 0xFF %1) %2) v shift)))))
 
