@@ -28,14 +28,21 @@
   "change root *byte-order* to big endian"
   (alter-var-root #'*byte-order* (constantly ByteOrder/BIG_ENDIAN)))
 
-(defn- read-bytes
-  "read bytes into byte array, looping if necessary"
-  [s bs]
-  (loop [pos 0]
-    (when (< pos (alength bs))
-      (let [toread (- (alength bs) pos)
-            n (.read s bs pos toread)]
-        (recur (+ pos n))))))
+(defprotocol ReadBytes
+  (read-proxy [s b off len]))
+
+(extend-protocol ReadBytes
+  InputStream
+   (read-proxy [s b off len] (.read s b off len)))
+
+(defn read-bytes [s b sz off]
+  (let  [len (- sz off)
+         _ (assert (> len 0))
+       n (read-proxy s b off len)]
+  (cond
+   (neg? n) (throw (java.io.EOFException.))
+   (< n len) (recur s b sz (+ off n))
+   :else  sz)))
 
 (defprotocol MarshalBytes
   "marshal bytes from InputStream and to OutputStream"
@@ -79,7 +86,7 @@
   InputStream
   (m-uval [s sz]
     (let [v (byte-array sz)
-          n (read-bytes s v)
+          n (read-bytes s v sz 0)
           shift (byte-offsets sz)]
       (if (<= sz 4)
         (reduce bit-or (map #(bit-shift-left (bit-and 0xFF %1) %2) v shift))
@@ -87,7 +94,7 @@
       
   (m-sval [s sz]
     (let [v (byte-array sz)
-          n (read-bytes s v)
+          n (read-bytes s v sz 0)
           shift (byte-offsets sz)]
       (if (= sz 1)
         (first v)
@@ -102,13 +109,13 @@
 
   (m-float [s _]
     (let [v (byte-array 4)
-          n (read-bytes s v)
+          n (read-bytes s v 4 0)
           shift (byte-offsets 4)]
       (Float/intBitsToFloat (reduce + (map #(bit-shift-left (bit-and 0xFF %1) %2) v shift)))))
 
   (m-double [s _]
     (let [v (byte-array 8)
-          n (read-bytes s v)
+          n (read-bytes s v 8 0)
           shift (byte-offsets 8)]
       (Double/longBitsToDouble (reduce + (map #(bit-shift-left (bit-and 0xFF %1) %2) v shift)))))
 
