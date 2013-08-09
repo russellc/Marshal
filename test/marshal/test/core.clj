@@ -16,26 +16,16 @@
 
 ;(set! *warn-on-reflection* true)
 
-(def reader-1-less
+(def reader-1
   (reify
     ReadBytes
-    (read-proxy [_ b off len]
-      (if (= len 1)
-        (do
-          (aset-byte b off off)
-          1)
-        (do
-          (dotimes [i (dec len)]
-            (aset-byte b (+ i off) (+ i off) ))
-          (dec len))))))
+    (read-proxy [_ b off len] (do (aset-byte b off off) 1))))
 
 (deftest read-bytes-test
   (let [v (byte-array 4)
-        n (read-bytes reader-1-less v 4 0)] 
-    (is (= 0 (nth v 0)))
-    (is (= 1 (nth v 1)))
-    (is (= 2 (nth v 2)))
-    (is (= 3 (nth v 3)))))  
+        n (read-bytes reader-1 v 4 0)] 
+    (is (= '(0 1 2 3)  (map byte v)))
+    (is (= n 4))))
 
 (def reader-eof
   (reify
@@ -43,9 +33,7 @@
     (read-proxy [_ _ _ _] -1)))
 
 (deftest read-bytes-exception
-  (let [v (byte-array 4)
-        n (read-bytes reader-1-less v 4 0)] 
-    (is (thrown? java.io.EOFException (read-bytes reader-eof (byte-array 1) 1 0))))) 
+  (is (thrown? java.io.EOFException (read-bytes reader-eof (byte-array 1) 1 0))))
 
 (deftest bigend
   (binding [*byte-order* ByteOrder/BIG_ENDIAN]
